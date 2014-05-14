@@ -1,0 +1,345 @@
+imageproxy
+==========
+
+**[home page](https://github.com/eahanson/imageproxy)** • **[release notes](https://github.com/eahanson/imageproxy/blob/master/release-notes.mdown)** • **[RubyGems](http://rubygems.org/gems/imageproxy)**
+
+A image processing proxy server, written in Ruby as a Rack application.
+
+There are many possible uses for this, but one major use is to resize images on-the-fly directly from HTML code, rather than processing the image when it is first uploaded or created. For example, if a user uploads a file to your site and it gets stored in `http://example.com/uploads/39c0c11af.png`, you could show a 50x50 px version like this:
+
+    <img src="http://example.com/convert?resize=50x50&source=http%3A%2F%2Fexample.com%2Fuploads%2F39c0c11af.png">
+
+If you ever decided to change the size, you wouldn't have to re-encode anything, just change the HTML:
+
+    <img src="http://example.com/convert?resize=75x75&source=http%3A%2F%2Fexample.com%2Fuploads%2F39c0c11af.png">
+
+See [http://imageproxy.heroku.com/selftest](http://imageproxy.heroku.com/selftest) for some examples (it's running on Heroku's free plan, so it will be a bit slow).
+
+Status
+------
+
+imageproxy is being used in production on at least one commercial website, keeping two big EC2 servers busy. There are definitely some feature and performance improvements that can be/need to be made. Suggestions and pull requests are welcome.
+
+### Current Features
+
+  * display information about an image
+  * resize, flip, rotate, change format and change quality of images
+  * standard query-parameter based URLs as well as Amazon CloudFront-compatibile URLs
+  * tested on Heroku and Amazon EC2
+  * use the requester's user agent string
+  * signed requests (to stop unauthorized use)
+  * obfuscated params
+
+### Future Features
+
+Feel free to help out with some of these :)
+
+  * specify crop size and offset
+  * create rounded corners
+  * Rails helper for generating image tags that use imageproxy
+  * X-Sendfile / X-Accel-Redirect header
+  * better documentation
+  * signature generation testing tool
+  * nice error messages for improper API use
+  * performance
+
+Performance
+-----------
+
+imageproxy doesn't do any sort of caching. That kind of thing is better left up to CDNs (like Amazon CloudFront or VoxCast CDN) or to caching proxies such as Varnish.
+
+Also, imageproxy itself isn't nearly as fast as it could be. It's written in an interpreted language, and it shells out to curl and ImageMagick to do its work. Presumably, it would be way faster written in C as an Apache module or something.
+
+
+Requirements
+------------
+
+  * [Ruby](http://www.ruby-lang.org/)
+  * [Rack](http://rack.github.com)
+  * [Imagemagick](http://www.imagemagick.org/)
+  * [Curl](http://curl.haxx.se)
+
+
+Installing
+----------
+
+  `gem install imageproxy`
+
+
+API
+---
+
+There are two major functions: `identify` and `convert`, plus a helpful `selftest` function.
+
+### Identify
+
+`identify` spits out a lot of information about the provided image.
+
+#### Parameters
+
+`source` *(Required)* The URL of the image to identify.
+
+`signature` To stop unauthorized use. See the "Signing Requests" section of this document.
+
+### Convert
+
+`convert` converts an image.
+
+#### Parameters
+
+`source` *(Required)* The URL of the image to convert. (Also aliased to `src`.)
+
+`resize` The new size of the image, in "WxH" format (e.g., `20x30`).
+
+`thumbnail` The new size of the image, in "WxH" format (e.g., `20x30`). Thumbnailing assumes the resulting image will be pretty small and makes some optimizations.
+
+`shape` The shape of the image, when `resize`ing or `thumbnail`ing to a different aspect ratio. The value can be `preserve` which will preserve the original aspect ratio, `pad` which will add padding to keep the proper aspect ratio (you can supply a `background` parameter to choose the background color to pad with, or leave blank to pad with transparent color if the image format allows it), and `cut` which will cut the image to fit the new size. The default is `preserve`.
+
+`flip` Flip the image. The value can be `horizontal` or `vertical`.
+
+`rotate` Rotate the image. The value can be any number. When rotating to a non-right-angle, you can specify the `background` parameter to choose the color for the background.
+
+`format` Change the format. Possible formats include `gif`, `jpg`, `png`, `png8`, etc.
+
+`quality` Choose the compression quality for formats that support lossy compression. The value can be any number from 0 to 100. The default is to use [Imagemagick's default quality settings](http://www.imagemagick.org/script/command-line-options.php#quality).
+
+`progressive` Choose whether a JPEG image should be a progressive JPEG or not. Possible values are `true` and `false`. The default is `false`.
+
+`background` Some operations allow for a background color to be provided. The format is hex (e.g., `#ff00ff`) or rgba (e.g., `rgba(20,30,19,0.4)`)
+
+`signature` To stop unauthorized use. See the "Signing Requests" section of this document.
+
+### Request Format
+
+The request must start with `identify` or `convert` (for backwards-compatibility, `process` is a synonym for `convert`).
+
+The parameters can be query string parameters, like this:
+
+    http://example.com/convert?resize=100x100&shape=cut
+
+Or, the parameters can be Amazon CloudFront-compatible URLs, like this:
+
+    http://example.com/convert/resize/100x100/shape/cut
+
+(Note that CloudFront now optionally support query parameters.)
+
+You can also mix the parameters if you like. This doesn't make much sense except for the case of the `signature` parameter which must be a query param:
+
+    http://example.com/convert/resize/100x100?signature=szFGj470w%2ByhJYJfTRryFLF9msA%3D
+
+**Important:** Make sure to URL escape all query parameters. When using the CloudFront-compatible URL format, make sure to **double-escape** the source URL:
+
+    http://example.com/convert?resize=100x100&source=http://www.google.com/images/logos/ps_logo2.png # WRONG - not escaped
+    http://example.com/convert?resize=100x100&source=http%3A%2F%2Fwww.google.com%2Fimages%2Flogos%2Fps_logo2.png # RIGHT - escaped
+
+    http://exampe.com/convert/resize/100x100/source/http://www.google.com/images/logos/ps_logo2.png # WRONG - not escaped
+    http://exampe.com/convert/resize/100x100/source/http%3A%2F%2Fwww.google.com%2Fimages%2Flogos%2Fps_logo2.png # WRONG - only escaped once
+    http://exampe.com/convert/resize/100x100/source/http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png # RIGHT - escaped and then escaped again
+
+### Signing Requests
+
+To require that requests are signed, set the following two environment variables:
+
+    IMAGEPROXY_SIGNATURE_REQUIRED=true
+    IMAGEPROXY_SIGNATURE_SECRET=some secret key
+
+Then add a `signature` parameter to your query string or path.
+
+The signature is calculated with the following formula, which is the same formula that Amazon Web Services uses:
+
+    URLSafeBase64( HMAC-SHA1( UTF-8-Encoding-Of( YourSecretKey, StringToSign ) ) );
+
+Where YourSecretKey is a secret key that you make up, and StringToSign is the full path of the request, excluding host name and the "signature" parameter, in the same order as in the query. For `http://example.com/convert/resize/100x100?shape=cut&signature=szFGj470w%2ByhJYJfTRryFLF9msA%3D` the StringToSign would be `/convert/resize/100x100?shape=cut`.
+
+URL safe base64 is the normal encoding but with replacing the + with - and / with _.
+
+Example Ruby code to generate the signature:
+
+    digest = OpenSSL::Digest.new("sha1")
+    Base64.encode64(OpenSSL::HMAC.digest(digest, your_secret_key, your_query_string)).strip.tr('+/', '-_')
+
+### Other Server Configuration
+
+`IMAGEPROXY_TIMEOUT` maximum duration (in whole seconds) for downloading a source image (not recommended if you're using Ruby 1.8)
+
+`IMAGEPROXY_CACHE_TIME` value of the max-age header for the converted image
+
+`IMAGEPROXY_VERBOSE` enables full Ruby stacktraces in your error log
+
+`IMAGEPROXY_ALLOWED_DOMAINS` A comma-separated list of second-level domains (e.g., "example.com, example.org") that are valid domains for the `source` parameter. If not specified, then the `source` parameter can reference any domain.
+
+`IMAGEPROXY_MAX_SIZE` The maximum dimension allowed for a `resize` or `thumbnail` operation. Specifying `20` would cause a resize of `10x30` to fail because the maximum dimension of `20` is less than the largest requested dimension of `30`.
+
+`IMAGEPROXY_WORLD_READABLE_TEMPFILE` set to `true` if you want the generated tempfiles to be `-rw-r--r--` instead of the default `-rw-------`
+
+
+### Obfuscating Requests
+
+You may obfuscate your requests by Base64 encoding and then URL encoding your query string or path. The parameter name for this encoded value is `_` if you're using a query string or `-` if you're using a path. Example:
+
+    http://example.com/convert?src=http://example.com/dog.jpg&resize=10x10
+    http://example.com/convert?_=c3JjPWh0dHA6Ly9leGFtcGxlLmNvbS9kb2cuanBnJnJlc2l6ZT0xMHgxMA%3D%3D
+    http://example.com/convert/-/c3JjPWh0dHA6Ly9leGFtcGxlLmNvbS9kb2cuanBnJnJlc2l6ZT0xMHgxMA%3D%3D
+
+You can also replace the "=" characters in the Base64-encoded strings with "." characters which may make it possible to
+avoid having to percent-escape.
+
+### Example requests
+
+CloudFront-compatible URLs:
+
+    http://example.com/convert/resize/100x100/source/http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+    http://example.com/identify/source/http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+
+Regular query string URLs:
+
+    http://example.com/convert?resize=100x100&source=http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+    http://example.com/identify?source=http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+
+Resize:
+
+    http://example.com/convert?resize=100x100&source=http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+
+Resize with padding:
+
+    http://example.com/convert?resize=100x100&shape=pad&source=http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+    http://example.com/convert?resize=100x100&shape=pad&background=%23ff00ff&source=http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+
+Resize with cutting:
+
+    http://example.com/convert?resize=100x100&shape=cut&source=http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+
+Flipping:
+
+    http://example.com/convert?flip=horizontal&source=http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+    http://example.com/convert?flip=vertical&source=http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+
+Rotating:
+
+    http://example.com/convert?rotate=90&source=http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+    http://example.com/convert?rotate=120&source=http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+    http://example.com/convert?rotate=120&background=%23ff00ff&source=http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+
+Combo:
+
+    http://example.com/convert?resize=100x100&shape=cut&rotate=45&background=%23ff00ff&source=http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png
+
+With signature (signed with secret key "SEEKRET"):
+
+    http://example.com/convert/resize/100x100/source/http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png?signature=iNoljMh0kALsoxRLzJfr7Wcq%2BnY%3D
+    http://example.com/convert?resize=100x100&source=http%253A%252F%252Fwww.google.com%252Fimages%252Flogos%252Fps_logo2.png&signature=KLga1QNdCY8Xu4thsKdbTUjnYAk%3D
+
+
+### Selftest
+
+You can go to the `/selftest` URL to see everything in action. For example: [http://imageproxy.heroku.com/selftest](http://imageproxy.heroku.com/selftest).
+
+
+Sample EC2 Installation Recipe
+------------------------------
+
+Create and boot an instance of an AWS Linux AMI using [Amazon's EC2 console](https://console.aws.amazon.com/ec2/). In this example, I used a "micro" instance.
+
+ssh into the instance as user `ec2-user`
+
+Make a directory for the proxy:
+
+    sudo mkdir /opt/imageproxy
+    sudo chown ec2-user:ec2-user /opt/imageproxy
+
+Install the Ruby HTTP stack + ImageMagick:
+
+    sudo yum -y install make gcc gcc-c++ http rubygems ruby-devel openssl-devel zlib-devel httpd-devel git curl-devel openssl ImageMagick ImageMagick-devel
+
+Install passenger:
+
+    sudo gem install passenger
+    sudo passenger-install-apache2-module
+
+Update the Apache config as suggested by the passenger installer
+
+    LoadModule passenger_module /usr/lib/ruby/gems/1.8/gems/passenger-3.0.5/ext/apache2/mod_passenger.so
+    PassengerRoot /usr/lib/ruby/gems/1.8/gems/passenger-3.0.5
+    PassengerRuby /usr/bin/ruby
+
+Set up a VirtualHost as suggested by the passenger installer
+
+    <VirtualHost *:80>
+        ServerName ec2-184-72-213-98.compute-1.amazonaws.com
+        DocumentRoot /opt/imageproxy/public
+        <Directory /opt/imageproxy/public>
+            Allow from all
+            Options -MultiViews
+        </Directory>
+    </VirtualHost>
+
+Clone the imageproxy code:
+
+    git clone git://github.com/eahanson/imageproxy.git
+
+Install the gems:
+
+    bundle install
+
+Start Apache:
+
+    sudo /etc/init.d/httpd start
+
+
+Sample Heroku Installation Recipe
+------------------------------
+
+Clone the imageproxy code:
+
+    git clone git://github.com/eahanson/imageproxy.git
+
+Set up Heroku:
+
+As of Aug 2012 cedar does not work out of the box but bamboo does (specify bamboo as
+an option to the heroku create command).
+
+    http://devcenter.heroku.com/articles/quickstart
+
+Deploy:
+
+    git push heroku master
+
+
+If You Want To Modify The Code
+------------------------------
+
+Tun run the server locally:
+
+    rackup
+
+Make sure everthing is working:
+
+    http://localhost:9292/selftest
+
+To run the specs
+
+    rake spec
+
+Related
+-------
+
+  * [Thumbor](https://github.com/globocom/thumbor) is similar but has "smart crop" using various detection algorithms and some other features.
+  * [Imgix](http://www.imgix.com) is a service that handles all of this for you, plus has a bunch of cool features
+  
+
+Thanks
+------
+
+Thanks to the following for code contributions:
+
+  * [David Hall](https://github.com/moonhouse)
+  * [Andy Blyler](https://github.com/ablyler)
+  * [NeedFeed](https://github.com/needfeed)
+  * [Daniel Szmulewicz](https://github.com/danielsz)
+  * [Gordon Chan](https://github.com/gordonc)
+  * [Michael Mahemoff](https://github.com/mahemoff)
+
+License
+-------
+
+Licensed under the MIT license. See LICENSE.txt.

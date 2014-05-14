@@ -1,0 +1,56 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    awesome_print (0.3.2)
+    coderay (1.1.0)
+    configuration (1.2.0)
+    diff-lcs (1.1.2)
+    git (1.2.5)
+    heroku (1.18.3)
+      launchy (~> 0.3.2)
+      rest-client (>= 1.4.0, < 1.7.0)
+    jeweler (1.6.2)
+      bundler (~> 1.0)
+      git (>= 1.2.5)
+      rake
+    launchy (0.3.7)
+      configuration (>= 0.0.5)
+      rake (>= 0.8.1)
+    method_source (0.8.2)
+    mime-types (1.16)
+    pry (0.9.12.6)
+      coderay (~> 1.0)
+      method_source (~> 0.8)
+      slop (~> 3.4)
+    rack (1.2.2)
+    rack-test (0.5.7)
+      rack (>= 1.0)
+    rake (0.8.7)
+    rest-client (1.6.1)
+      mime-types (>= 1.16)
+    rspec (2.5.0)
+      rspec-core (~> 2.5.0)
+      rspec-expectations (~> 2.5.0)
+      rspec-mocks (~> 2.5.0)
+    rspec-core (2.5.1)
+    rspec-expectations (2.5.0)
+      diff-lcs (~> 1.1.2)
+    rspec-mocks (2.5.0)
+    shotgun (0.9)
+      rack (>= 1.0)
+    slop (3.5.0)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  awesome_print
+  heroku
+  jeweler
+  mime-types
+  pry
+  rack
+  rack-test
+  rake
+  rspec
+  shotgun
