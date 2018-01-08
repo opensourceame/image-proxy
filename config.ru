@@ -1,13 +1,12 @@
 require 'bundler'
 require 'rack/sendfile'
-require 'pry'
 
-require_relative 'cache'
-
-require File.join(File.expand_path(File.dirname(__FILE__)), "lib", "imageproxy")
+require_relative 'lib/imageproxy'
 
 use ImageProxy::Cache
 
-ImageProxy::Cache.cache_dir = '/tmp/cache/'
+cache_dir = ENV['IMAGE_CACHE_DIR'] ? ENV['IMAGE_CACHE_DIR'] : '/tmp/'
+
+ImageProxy::Cache.cache_dir = cache_dir
 
 run Rack::Sendfile.new(ImageProxy::Server.new)
